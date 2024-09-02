@@ -1,4 +1,4 @@
-# ShopOS - Ecommerce API Operating System
+# 🛍️ShopOS - Ecommerce API Operating System
 
 ## Architecture
 ```mermaid
