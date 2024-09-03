@@ -1,5 +1,9 @@
 # 🛍️ShopOS - Ecommerce API Operating System
 
+---
+This is the Admin Dashboard of ShopOS build with Nest.js and Next.js
+<img width="2185" alt="image" src="https://github.com/user-attachments/assets/fb290798-5db1-4539-9ae9-a663bcb15bf5">
+
 ## Architecture
 ```mermaid
 graph TD
