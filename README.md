@@ -3,6 +3,9 @@
 ## Project Overview
 Developed a customizable Ecommerce Operating System to address the needs of store managers using fixed platforms who want to leverage accumulated data for new feature development as their businesses grow. The project aimed to create a SaaS solution that implements the concept of an Operating System, allowing customization by specialized users such as developers and designers.
 
+## Project Overview
+Developed a customizable Ecommerce Operating System to address the needs of store managers using fixed platforms who want to leverage accumulated data for new feature development as their businesses grow. The project aimed to create a SaaS solution that implements the concept of an Operating System, allowing customization by specialized users such as developers and designers.
+
 ---
 ### This is the Admin Dashboard of ShopOS
 <img width="2185" alt="image" src="https://github.com/user-attachments/assets/fb290798-5db1-4539-9ae9-a663bcb15bf5">
