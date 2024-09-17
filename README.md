@@ -30,6 +30,7 @@ graph TD
 - Nest.js-based ecommerce framework, installable via NPM
 - Includes ecommerce backend business logic, data repositories, OpenAPI, Administration UI, and GraphQL playground
 - Incorporates ORM concepts to serve GraphQL APIs based on user-customized data models added through the UI
+- Designed a modular structure using connectors, allowing flexible implementation of 3rd party providers (e.g., PG providers) adhering to specified standards
 
 ## Technical Implementation
 - Created an API that serves custom fields in addition to fixed columns as GraphQL structures
