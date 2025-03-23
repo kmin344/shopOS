@@ -5,6 +5,7 @@ import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { CoreModule } from './core/core.module';
 import { CustomFieldModule } from './custom-field/custom-field.module';
 import { ConnectorModule } from './connector/connector.module';
+import { ScalarsModule } from './common/scalars/scalars.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ConnectorModule } from './connector/connector.module';
     CoreModule,
     CustomFieldModule,
     ConnectorModule,
+    ScalarsModule,
   ],
 })
 export class AppModule {}
