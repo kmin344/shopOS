@@ -2,6 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConnectorService } from './connector.service';
 
 @Module({
-  providers: [ConnectorService]
+  providers: [ConnectorService],
 })
 export class ConnectorModule {}

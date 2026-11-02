@@ -1,10 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { CustomFieldValue } from '../entities/custom-field-value.entity';
-import { CustomField, EntityType } from '../entities/custom-field.entity';
+import { EntityType } from '../entities/custom-field.entity';
 import { CustomFieldService } from './custom-field.service';
-import { In } from 'typeorm';
 
 @Injectable()
 export class CustomFieldValueService {
@@ -46,9 +45,12 @@ export class CustomFieldValueService {
     entityId: string,
     entityType: EntityType,
   ): Promise<CustomFieldValue[]> {
-    const customFields = await this.customFieldService.findByEntityType(
-      entityType,
-    );
+    const customFields =
+      await this.customFieldService.findByEntityType(entityType);
+
+    if (customFields.length === 0) {
+      return [];
+    }
 
     return await this.customFieldValueRepository.find({
       where: {
