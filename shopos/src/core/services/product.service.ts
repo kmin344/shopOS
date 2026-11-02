@@ -13,8 +13,13 @@ export class ProductService {
   ) {}
 
   async create(createProductInput: CreateProductInput): Promise<Product> {
-    const product = this.productRepository.create(createProductInput);
-    return await this.productRepository.save(product);
+    const { categoryId, ...fields } = createProductInput;
+    const product = this.productRepository.create({
+      ...fields,
+      category: { id: categoryId },
+    });
+    const saved = await this.productRepository.save(product);
+    return this.findOne(saved.id);
   }
 
   async findAll(): Promise<Product[]> {
@@ -34,7 +39,12 @@ export class ProductService {
     id: string,
     updateProductInput: UpdateProductInput,
   ): Promise<Product> {
-    await this.productRepository.update(id, updateProductInput);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id: _id, categoryId, ...fields } = updateProductInput;
+    await this.productRepository.update(id, {
+      ...fields,
+      ...(categoryId ? { category: { id: categoryId } } : {}),
+    });
     return this.findOne(id);
   }
 

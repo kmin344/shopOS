@@ -1,3 +1,4 @@
+import { decimalTransformer } from '../../common/transformers/decimal.transformer';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -46,7 +47,11 @@ export class Order implements HasCustomFields {
   status: OrderStatus;
 
   @Field(() => Float)
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column('decimal', {
+    precision: 10,
+    scale: 2,
+    transformer: decimalTransformer,
+  })
   totalAmount: number;
 
   @Field(() => [Product])
