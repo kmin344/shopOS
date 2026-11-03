@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { isUUID } from 'class-validator';
 import { Order, OrderStatus } from '../entities/order.entity';
 import { CreateOrderInput } from '../dto/create-order.input';
 import { UpdateOrderInput } from '../dto/update-order.input';
@@ -22,15 +23,13 @@ export class OrderService {
       createOrderInput.productIds.map((id) => this.productService.findOne(id)),
     );
 
-    if (products.some((p) => !p)) {
-      throw new NotFoundException('Some products were not found');
-    }
-
     order.products = products;
-    order.totalAmount = products.reduce(
-      (sum, product) => sum + product.price,
+    // Sum in integer cents so totals like 0.10 + 0.20 come out as 0.30.
+    const totalCents = products.reduce(
+      (sum, product) => sum + Math.round(product.price * 100),
       0,
     );
+    order.totalAmount = totalCents / 100;
 
     return await this.orderRepository.save(order);
   }
@@ -42,17 +41,20 @@ export class OrderService {
   }
 
   async findOne(id: string): Promise<Order> {
-    return await this.orderRepository.findOne({
-      where: { id },
-      relations: ['products'],
-    });
+    const order = isUUID(id)
+      ? await this.orderRepository.findOne({
+          where: { id },
+          relations: ['products'],
+        })
+      : null;
+    if (!order) {
+      throw new NotFoundException(`Order ${id} not found`);
+    }
+    return order;
   }
 
   async update(id: string, updateOrderInput: UpdateOrderInput): Promise<Order> {
     const order = await this.findOne(id);
-    if (!order) {
-      throw new NotFoundException('Order not found');
-    }
 
     if (updateOrderInput.status) {
       order.status = updateOrderInput.status as OrderStatus;

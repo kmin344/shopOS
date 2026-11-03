@@ -32,13 +32,13 @@ jobs:
       DB_PORT: 5432
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
-      DB_NAME: shopos
+      # e2e tests use their own shopos_test database (see test/setup-env.js)
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
           cache: yarn
           cache-dependency-path: shopos/yarn.lock
       - run: yarn install --frozen-lockfile

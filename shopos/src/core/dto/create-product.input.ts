@@ -6,6 +6,7 @@ import {
   IsNumber,
   Min,
   IsOptional,
+  IsUUID,
 } from 'class-validator';
 
 @InputType()
@@ -24,7 +25,7 @@ export class CreateProductInput {
 
   @ApiProperty({ description: 'Product price', minimum: 0 })
   @Field(() => Float)
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   price: number;
 
@@ -36,6 +37,6 @@ export class CreateProductInput {
 
   @ApiProperty({ description: 'Category ID' })
   @Field()
-  @IsNotEmpty()
+  @IsUUID()
   categoryId: string;
 }

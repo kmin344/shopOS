@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { isUUID } from 'class-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Category } from '../entities/category.entity';
@@ -24,17 +25,26 @@ export class CategoryService {
   }
 
   async findOne(id: string): Promise<Category> {
-    return await this.categoryRepository.findOne({
-      where: { id },
-      relations: ['products'],
-    });
+    const category = isUUID(id)
+      ? await this.categoryRepository.findOne({
+          where: { id },
+          relations: ['products'],
+        })
+      : null;
+    if (!category) {
+      throw new NotFoundException(`Category ${id} not found`);
+    }
+    return category;
   }
 
   async update(
     id: string,
     updateCategoryInput: UpdateCategoryInput,
   ): Promise<Category> {
-    await this.categoryRepository.update(id, updateCategoryInput);
+    await this.findOne(id);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id: _id, ...fields } = updateCategoryInput;
+    await this.categoryRepository.update(id, fields);
     return this.findOne(id);
   }
 

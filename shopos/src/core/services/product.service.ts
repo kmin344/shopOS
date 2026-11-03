@@ -1,8 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { isUUID } from 'class-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from '../entities/product.entity';
 import { CreateProductInput } from '../dto/create-product.input';
+import { CategoryService } from './category.service';
 import { UpdateProductInput } from '../dto/update-product.input';
 
 @Injectable()
@@ -10,10 +12,12 @@ export class ProductService {
   constructor(
     @InjectRepository(Product)
     private productRepository: Repository<Product>,
+    private categoryService: CategoryService,
   ) {}
 
   async create(createProductInput: CreateProductInput): Promise<Product> {
     const { categoryId, ...fields } = createProductInput;
+    await this.categoryService.findOne(categoryId);
     const product = this.productRepository.create({
       ...fields,
       category: { id: categoryId },
@@ -29,10 +33,16 @@ export class ProductService {
   }
 
   async findOne(id: string): Promise<Product> {
-    return await this.productRepository.findOne({
-      where: { id },
-      relations: ['category'],
-    });
+    const product = isUUID(id)
+      ? await this.productRepository.findOne({
+          where: { id },
+          relations: ['category'],
+        })
+      : null;
+    if (!product) {
+      throw new NotFoundException(`Product ${id} not found`);
+    }
+    return product;
   }
 
   async update(
@@ -41,6 +51,10 @@ export class ProductService {
   ): Promise<Product> {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id: _id, categoryId, ...fields } = updateProductInput;
+    await this.findOne(id);
+    if (categoryId) {
+      await this.categoryService.findOne(categoryId);
+    }
     await this.productRepository.update(id, {
       ...fields,
       ...(categoryId ? { category: { id: categoryId } } : {}),

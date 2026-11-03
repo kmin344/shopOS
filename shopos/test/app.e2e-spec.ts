@@ -4,24 +4,54 @@ import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 import { AppModule } from './../src/app.module';
 
-// Runs the full GraphQL flow against a real Postgres database.
-// Configure the connection with the same DB_* variables the app uses.
-describe('ShopOS GraphQL (e2e)', () => {
+// Runs the full GraphQL and REST flow against a real Postgres database.
+// test/setup-env.js points the app at a dedicated *_test database.
+describe('ShopOS API (e2e)', () => {
   let app: INestApplication;
+
+  const graphql = (query: string, variables: Record<string, unknown> = {}) =>
+    request(app.getHttpServer())
+      .post('/graphql')
+      .send({ query, variables })
+      .expect(200)
+      .then((res) => res.body);
 
   const gql = async (
     query: string,
     variables: Record<string, unknown> = {},
   ) => {
-    const res = await request(app.getHttpServer())
-      .post('/graphql')
-      .send({ query, variables })
-      .expect(200);
-    if (res.body.errors) {
-      throw new Error(JSON.stringify(res.body.errors, null, 2));
+    const body = await graphql(query, variables);
+    if (body.errors) {
+      throw new Error(JSON.stringify(body.errors, null, 2));
     }
-    return res.body.data;
+    return body.data;
   };
+
+  const errorOf = async (query: string, variables: Record<string, unknown>) => {
+    const body = await graphql(query, variables);
+    expect(body.errors).toBeDefined();
+    return body.errors[0];
+  };
+
+  const createCategory = (name: string) =>
+    gql(
+      `mutation ($input: CreateCategoryInput!) { createCategory(input: $input) { id } }`,
+      { input: { name } },
+    ).then((d) => d.createCategory.id as string);
+
+  const createProduct = (categoryId: string, name: string, price: number) =>
+    gql(
+      `mutation ($input: CreateProductInput!) { createProduct(input: $input) { id } }`,
+      { input: { name, price, stock: 5, categoryId } },
+    ).then((d) => d.createProduct.id as string);
+
+  const createOrder = (productIds: string[]) =>
+    gql(
+      `mutation ($input: CreateOrderInput!) {
+        createOrder(input: $input) { id totalAmount products { name } }
+      }`,
+      { input: { productIds } },
+    ).then((d) => d.createOrder);
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -31,7 +61,10 @@ describe('ShopOS GraphQL (e2e)', () => {
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(new ValidationPipe());
     await app.init();
-    await app.get(DataSource).synchronize(true);
+
+    const dataSource = app.get(DataSource);
+    expect(dataSource.options.database).toMatch(/_test$/);
+    await dataSource.synchronize(true);
   });
 
   afterAll(async () => {
@@ -39,31 +72,12 @@ describe('ShopOS GraphQL (e2e)', () => {
   });
 
   it('attaches a runtime custom field to a product and serves it through GraphQL', async () => {
-    const { createCategory } = await gql(
-      `mutation ($input: CreateCategoryInput!) {
-        createCategory(input: $input) { id name }
-      }`,
-      { input: { name: 'Laptops' } },
-    );
-
-    const { createProduct } = await gql(
-      `mutation ($input: CreateProductInput!) {
-        createProduct(input: $input) { id name category { id } }
-      }`,
-      {
-        input: {
-          name: 'Gaming Laptop',
-          price: 1299.99,
-          stock: 10,
-          categoryId: createCategory.id,
-        },
-      },
-    );
-    expect(createProduct.category.id).toBe(createCategory.id);
+    const categoryId = await createCategory('Laptops');
+    const productId = await createProduct(categoryId, 'Gaming Laptop', 1299.99);
 
     const { createCustomField } = await gql(
       `mutation ($input: CreateCustomFieldInput!) {
-        createCustomField(input: $input) { id name fieldType entityType }
+        createCustomField(input: $input) { id }
       }`,
       {
         input: {
@@ -79,11 +93,7 @@ describe('ShopOS GraphQL (e2e)', () => {
       `mutation ($entityId: ID!, $fieldId: ID!, $value: String!) {
         setCustomFieldValue(entityId: $entityId, customFieldId: $fieldId, value: $value) { id }
       }`,
-      {
-        entityId: createProduct.id,
-        fieldId: createCustomField.id,
-        value: 'black',
-      },
+      { entityId: productId, fieldId: createCustomField.id, value: 'black' },
     );
 
     const { product } = await gql(
@@ -95,7 +105,7 @@ describe('ShopOS GraphQL (e2e)', () => {
           customFieldValues { value customField { name fieldType } }
         }
       }`,
-      { id: createProduct.id },
+      { id: productId },
     );
 
     expect(product).toEqual({
@@ -108,33 +118,86 @@ describe('ShopOS GraphQL (e2e)', () => {
     });
   });
 
-  it('computes the order total from product prices', async () => {
-    const { categories } = await gql(`query { categories { id } }`);
-    const create = (name: string, price: number) =>
-      gql(
-        `mutation ($input: CreateProductInput!) {
-          createProduct(input: $input) { id }
-        }`,
-        { input: { name, price, stock: 5, categoryId: categories[0].id } },
-      ).then((d) => d.createProduct.id);
+  it('computes exact order totals without floating-point drift', async () => {
+    const categoryId = await createCategory('Accessories');
+    const a = await createProduct(categoryId, 'Sticker', 0.1);
+    const b = await createProduct(categoryId, 'Pin', 0.2);
+    const c = await createProduct(categoryId, 'Keyboard', 49.5);
+    const d = await createProduct(categoryId, 'Mouse', 19.99);
 
-    const ids = [await create('Mouse', 19.99), await create('Keyboard', 49.5)];
+    expect((await createOrder([a, b])).totalAmount).toBe(0.3);
 
-    const { createOrder } = await gql(
-      `mutation ($input: CreateOrderInput!) {
-        createOrder(input: $input) { totalAmount status products { name } }
-      }`,
-      { input: { productIds: ids } },
-    );
-
-    expect(createOrder.totalAmount).toBeCloseTo(69.49, 2);
-    expect(createOrder.products).toHaveLength(2);
+    const order = await createOrder([c, d]);
+    expect(order.totalAmount).toBe(69.49);
+    expect(order.products).toHaveLength(2);
   });
 
   it('returns no custom field values for an entity type with no fields defined', async () => {
-    const { categories } = await gql(
-      `query { categories { name customFieldValues { value } } }`,
+    const categoryId = await createCategory('Empty');
+    const { category } = await gql(
+      `query ($id: ID!) { category(id: $id) { customFieldValues { value } } }`,
+      { id: categoryId },
     );
-    expect(categories[0].customFieldValues).toEqual([]);
+    expect(category.customFieldValues).toEqual([]);
+  });
+
+  describe('invalid input', () => {
+    it('rejects a product whose category does not exist', async () => {
+      const error = await errorOf(
+        `mutation ($input: CreateProductInput!) { createProduct(input: $input) { id } }`,
+        {
+          input: {
+            name: 'Orphan',
+            price: 1,
+            stock: 1,
+            categoryId: '00000000-0000-4000-8000-000000000000',
+          },
+        },
+      );
+      expect(error.message).toMatch(/Category .* not found/);
+    });
+
+    it('rejects a malformed category ID and a price with more than two decimals', async () => {
+      const error = await errorOf(
+        `mutation ($input: CreateProductInput!) { createProduct(input: $input) { id } }`,
+        {
+          input: {
+            name: 'Bad',
+            price: 1.005,
+            stock: 1,
+            categoryId: 'not-a-uuid',
+          },
+        },
+      );
+      const messages = error.extensions.originalError.message.join(' ');
+      expect(messages).toMatch(/categoryId must be a UUID/);
+      expect(messages).toMatch(/price/);
+    });
+
+    it('rejects an order that lists the same product twice', async () => {
+      const categoryId = await createCategory('Dupes');
+      const id = await createProduct(categoryId, 'Cable', 5);
+      const error = await errorOf(
+        `mutation ($input: CreateOrderInput!) { createOrder(input: $input) { id } }`,
+        { input: { productIds: [id, id] } },
+      );
+      expect(error.extensions.originalError.message.join(' ')).toMatch(
+        /unique/,
+      );
+    });
+
+    it('returns a not-found error for a missing product over GraphQL and REST', async () => {
+      const error = await errorOf(
+        `query ($id: ID!) { product(id: $id) { id } }`,
+        {
+          id: '00000000-0000-4000-8000-000000000000',
+        },
+      );
+      expect(error.message).toMatch(/not found/);
+
+      await request(app.getHttpServer())
+        .get('/products/does-not-exist')
+        .expect(404);
+    });
   });
 });

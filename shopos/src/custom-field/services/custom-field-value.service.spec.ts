@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
+import { In } from 'typeorm';
 import { CustomFieldValueService } from './custom-field-value.service';
 import { CustomFieldService } from './custom-field.service';
 import { CustomFieldValue } from '../entities/custom-field-value.entity';
@@ -106,9 +107,14 @@ describe('CustomFieldValueService', () => {
       await service.getFieldValues('product-1', EntityType.PRODUCT);
 
       expect(fields.findByEntityType).toHaveBeenCalledWith(EntityType.PRODUCT);
-      const where = repo.find.mock.calls[0][0].where;
-      expect(where.entityId).toBe('product-1');
-      expect(where.customField.id.value).toEqual([colorField.id]);
+      expect(repo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            entityId: 'product-1',
+            customField: { id: In([colorField.id]) },
+          },
+        }),
+      );
     });
 
     it('returns an empty list without querying when no fields are defined', async () => {

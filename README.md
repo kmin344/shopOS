@@ -8,10 +8,10 @@ The problem it targets: store owners on fixed SaaS platforms can't add their own
 
 ## What works today
 
-- **Core catalog and orders**: GraphQL queries and mutations for products, categories and orders. Order totals are computed server-side from product prices.
+- **Core catalog and orders**: GraphQL queries and mutations for products, categories and orders. Order totals are computed server-side in integer cents, so they are exact. Inputs are validated (UUIDs, prices to two decimals, no duplicate products in an order), and missing records return not-found errors instead of database errors.
 - **Runtime custom fields**: define typed fields (`STRING`, `NUMBER`, `BOOLEAN`, `DATE`, `ENUM`) per entity type, set values per entity, and read them back on `Product`, `Category` and `Order` through a shared `HasCustomFields` GraphQL interface.
 - **REST + OpenAPI** alongside GraphQL, with Swagger UI at `/api`.
-- **Tests**: unit tests for the custom-field logic and end-to-end tests that run the full GraphQL flow against a real Postgres database. Both run in CI on every push.
+- **Tests**: unit tests for the custom-field logic and end-to-end tests that run the GraphQL and REST flows against a real Postgres database. Both run in CI on pull requests and on pushes to `main`.
 
 ## How custom fields work
 
@@ -32,12 +32,12 @@ Field **definitions** (`CustomField`) and field **values** (`CustomFieldValue`) 
 
 ## Run it locally
 
-Requires Node.js 18+ and Docker.
+Requires Node.js 20+ and Docker.
 
 ```bash
 cd shopos
 docker compose up -d          # Postgres on localhost:5432
-cp .env.example .env
+cp .env.example .env          # database settings, read at startup
 yarn install
 yarn start:dev
 ```
@@ -51,6 +51,8 @@ Run the tests:
 yarn test        # unit tests
 yarn test:e2e    # end-to-end, needs the Postgres container running
 ```
+
+The e2e suite drops and recreates its tables, so it always runs against a separate `shopos_test` database, which it creates on first run. It refuses to run against any database whose name doesn't end in `_test`.
 
 ## Example
 
@@ -98,6 +100,7 @@ These are part of the original design but are **not implemented in this reposito
 - **Admin UI** — a dashboard for defining custom fields without writing GraphQL.
 - **Frontend SDK** — an npm package for typed access to a store's schema.
 - **Validation of custom field values** against their declared type and enum options.
+- **Order line items with quantities** (an order currently holds each product once).
 
 <details>
 <summary>Admin dashboard design</summary>
@@ -108,4 +111,4 @@ These are part of the original design but are **not implemented in this reposito
 
 ## License
 
-[MIT](LICENSE)
+[GPL-3.0](LICENSE)
