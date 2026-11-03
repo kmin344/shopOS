@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { isUUID } from 'class-validator';
@@ -29,6 +33,9 @@ export class OrderService {
       (sum, product) => sum + Math.round(product.price * 100),
       0,
     );
+    if (totalCents > 9_999_999_999) {
+      throw new BadRequestException('Order total exceeds 99,999,999.99');
+    }
     order.totalAmount = totalCents / 100;
 
     return await this.orderRepository.save(order);
@@ -64,6 +71,7 @@ export class OrderService {
   }
 
   async remove(id: string): Promise<boolean> {
+    await this.findOne(id);
     const result = await this.orderRepository.delete(id);
     return result.affected > 0;
   }

@@ -186,6 +186,75 @@ describe('ShopOS API (e2e)', () => {
       );
     });
 
+    it('rejects a price that does not fit the price column', async () => {
+      const categoryId = await createCategory('Luxury');
+      const error = await errorOf(
+        `mutation ($input: CreateProductInput!) { createProduct(input: $input) { id } }`,
+        { input: { name: 'Yacht', price: 100000000, stock: 1, categoryId } },
+      );
+      expect(error.extensions.originalError.message.join(' ')).toMatch(
+        /price must not be greater than/,
+      );
+    });
+
+    it('refuses to delete a category that still has products, with 409 over REST', async () => {
+      const categoryId = await createCategory('In use');
+      await createProduct(categoryId, 'Lamp', 30);
+
+      await request(app.getHttpServer())
+        .delete(`/categories/${categoryId}`)
+        .expect(409);
+
+      const error = await errorOf(
+        `mutation ($id: ID!) { removeCategory(id: $id) }`,
+        {
+          id: categoryId,
+        },
+      );
+      expect(error.message).toMatch(/still has 1 product/);
+    });
+
+    it('returns 404 when deleting something that does not exist or has a malformed ID', async () => {
+      await request(app.getHttpServer()).delete('/categories/abc').expect(404);
+      await request(app.getHttpServer())
+        .delete('/products/00000000-0000-4000-8000-000000000000')
+        .expect(404);
+    });
+
+    it('rejects custom field values for entities that do not exist', async () => {
+      const { createCustomField } = await gql(
+        `mutation ($input: CreateCustomFieldInput!) { createCustomField(input: $input) { id } }`,
+        {
+          input: {
+            name: 'Material',
+            fieldType: 'STRING',
+            entityType: 'PRODUCT',
+            isRequired: false,
+          },
+        },
+      );
+      const setValue = `mutation ($entityId: ID!, $fieldId: ID!) {
+        setCustomFieldValue(entityId: $entityId, customFieldId: $fieldId, value: "oak") { id }
+      }`;
+
+      expect(
+        (
+          await errorOf(setValue, {
+            entityId: 'ghost',
+            fieldId: createCustomField.id,
+          })
+        ).message,
+      ).toMatch(/Product ghost not found/);
+      expect(
+        (
+          await errorOf(setValue, {
+            entityId: '00000000-0000-4000-8000-000000000000',
+            fieldId: 'abc',
+          })
+        ).message,
+      ).toMatch(/Custom field .* not found/);
+    });
+
     it('returns a not-found error for a missing product over GraphQL and REST', async () => {
       const error = await errorOf(
         `query ($id: ID!) { product(id: $id) { id } }`,

@@ -1,3 +1,4 @@
+import { isUUID } from 'class-validator';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -32,9 +33,9 @@ export class CustomFieldService {
   }
 
   async findOne(id: string): Promise<CustomField> {
-    const customField = await this.customFieldRepository.findOne({
-      where: { id },
-    });
+    const customField = isUUID(id)
+      ? await this.customFieldRepository.findOne({ where: { id } })
+      : null;
 
     if (!customField) {
       throw new NotFoundException(`Custom field with ID ${id} not found`);
@@ -54,6 +55,7 @@ export class CustomFieldService {
   }
 
   async remove(id: string): Promise<boolean> {
+    await this.findOne(id);
     const result = await this.customFieldRepository.delete(id);
     return result.affected > 0;
   }

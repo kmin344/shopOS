@@ -8,7 +8,7 @@ The problem it targets: store owners on fixed SaaS platforms can't add their own
 
 ## What works today
 
-- **Core catalog and orders**: GraphQL queries and mutations for products, categories and orders. Order totals are computed server-side in integer cents, so they are exact. Inputs are validated (UUIDs, prices to two decimals, no duplicate products in an order), and missing records return not-found errors instead of database errors.
+- **Core catalog and orders**: GraphQL queries and mutations for products, categories and orders. Order totals are computed server-side in integer cents, so they are exact. Inputs are validated (UUIDs, prices to two decimals and within the column's range, no duplicate products in an order). Reads, updates and deletes of missing records return not-found errors (404 over REST), custom field values can only be set on records that exist, and deleting a category that still has products returns 409.
 - **Runtime custom fields**: define typed fields (`STRING`, `NUMBER`, `BOOLEAN`, `DATE`, `ENUM`) per entity type, set values per entity, and read them back on `Product`, `Category` and `Order` through a shared `HasCustomFields` GraphQL interface.
 - **REST + OpenAPI** alongside GraphQL, with Swagger UI at `/api`.
 - **Tests**: unit tests for the custom-field logic and end-to-end tests that run the GraphQL and REST flows against a real Postgres database. Both run in CI on pull requests and on pushes to `main`.

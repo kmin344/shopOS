@@ -63,6 +63,7 @@ export class ProductService {
   }
 
   async remove(id: string): Promise<boolean> {
+    await this.findOne(id);
     const result = await this.productRepository.delete(id);
     return result.affected > 0;
   }

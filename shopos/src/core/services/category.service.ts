@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { isUUID } from 'class-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -49,6 +53,12 @@ export class CategoryService {
   }
 
   async remove(id: string): Promise<boolean> {
+    const category = await this.findOne(id);
+    if (category.products?.length) {
+      throw new ConflictException(
+        `Category ${id} still has ${category.products.length} product(s); move or delete them first`,
+      );
+    }
     const result = await this.categoryRepository.delete(id);
     return result.affected > 0;
   }
