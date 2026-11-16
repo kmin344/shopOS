@@ -7,3 +7,6 @@ if (!process.env.DB_NAME.endsWith('_test')) {
     `Refusing to run e2e tests against "${process.env.DB_NAME}": the name must end in _test.`,
   );
 }
+
+// The suite builds the schema itself from the migrations (see beforeAll).
+process.env.DB_MIGRATIONS_RUN = 'false';

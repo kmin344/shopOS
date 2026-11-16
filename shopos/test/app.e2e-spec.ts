@@ -79,7 +79,9 @@ describe('ShopOS API (e2e)', () => {
 
     const dataSource = app.get(DataSource);
     expect(dataSource.options.database).toMatch(/_test$/);
-    await dataSource.synchronize(true);
+    // Build the schema from the migrations, so the suite also proves they match the entities.
+    await dataSource.dropDatabase();
+    await dataSource.runMigrations();
   });
 
   afterAll(async () => {

@@ -12,7 +12,10 @@ module.exports = async () => {
   });
   await client.connect();
   const name = process.env.DB_NAME;
-  const { rowCount } = await client.query('SELECT 1 FROM pg_database WHERE datname = $1', [name]);
+  const { rowCount } = await client.query(
+    'SELECT 1 FROM pg_database WHERE datname = $1',
+    [name],
+  );
   if (rowCount === 0) {
     await client.query(`CREATE DATABASE "${name}"`);
   }

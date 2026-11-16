@@ -44,5 +44,13 @@ jobs:
       - run: yarn install --frozen-lockfile
       - run: yarn lint
       - run: yarn build
+      - name: Apply migrations and check that entities match them
+        run: yarn migration:run && yarn migration:check
       - run: yarn test --ci
       - run: yarn test:e2e --ci
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: docker build -t shopos shopos

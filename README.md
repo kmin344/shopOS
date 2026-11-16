@@ -57,6 +57,32 @@ yarn test:e2e    # end-to-end, needs the Postgres container running
 
 The e2e suite drops and recreates its tables, so it always runs against a separate `shopos_test` database, which it creates on first run. It refuses to run against any database whose name doesn't end in `_test`.
 
+## Database migrations
+
+The schema comes only from migrations in `shopos/src/database/migrations`. `synchronize` is always off.
+
+- The app applies pending migrations at startup. With more than one replica, run `yarn migration:run` as a deploy step and set `DB_MIGRATIONS_RUN=false` on the app.
+- After you change an entity, generate a migration: `yarn migration:generate src/database/migrations/<Name>`.
+- CI applies the migrations to an empty database and fails if the entities and migrations differ (`yarn migration:check`). The e2e suite also builds its schema from the migrations.
+
+## Deploy
+
+```bash
+docker build -t shopos shopos
+docker run -p 3000:3000 -e DB_HOST=... -e DB_PASSWORD=... -e DB_SSL=true shopos
+```
+
+Or run the full stack locally: `cd shopos && docker compose --profile app up --build`.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME` | `localhost`, `5432`, `postgres`, `postgres`, `shopos` | |
+| `DB_SSL` | `false` | Set `true` for managed Postgres. |
+| `DB_MIGRATIONS_RUN` | `true` | Set `false` when a deploy step runs migrations. |
+| `PORT`, `HOST` | `3000`, `0.0.0.0` | |
+
+`GET /health` is liveness. `GET /ready` also queries the database and returns `503` when it is down. The image runs as a non-root user.
+
 ## Example
 
 ```graphql

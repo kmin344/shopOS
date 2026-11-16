@@ -10,6 +10,7 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe());
   app.enableCors();
+  app.enableShutdownHooks();
 
   const config = new DocumentBuilder()
     .setTitle('ShopOS API')
@@ -24,7 +25,10 @@ async function bootstrap() {
   });
   SwaggerModule.setup('api', app, document);
 
-  await app.listen(3000);
+  await app.listen(
+    Number(process.env.PORT ?? 3000),
+    process.env.HOST ?? '0.0.0.0',
+  );
   console.log(`ShopOS is running on: ${await app.getUrl()}`);
 }
 bootstrap();

@@ -5,12 +5,15 @@ import {
   ManyToOne,
   CreateDateColumn,
   UpdateDateColumn,
+  Unique,
 } from 'typeorm';
 import { ObjectType, Field, ID } from '@nestjs/graphql';
 import { CustomField } from './custom-field.entity';
 
 @ObjectType()
 @Entity()
+// One value per field per entity. Also serves as the lookup index for entityId.
+@Unique(['entityId', 'customField'])
 export class CustomFieldValue {
   @Field(() => ID)
   @PrimaryGeneratedColumn('uuid')
