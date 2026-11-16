@@ -481,5 +481,39 @@ describe('ShopOS API (e2e)', () => {
       await createOrder([id]);
       await request(app.getHttpServer()).delete(`/products/${id}`).expect(409);
     });
+
+    it('keeps one value when two requests set the same custom field at once', async () => {
+      const categoryId = await createCategory('ConcurrentValues');
+      const productId = await createProduct(categoryId, 'Desk', 10);
+      const { createCustomField } = await gql(
+        `mutation { createCustomField(input: { name: "Finish", fieldType: STRING, entityType: PRODUCT, isRequired: false }) { id } }`,
+      );
+      const set = (value: string) =>
+        graphql(
+          `
+            mutation ($e: ID!, $f: ID!, $v: String!) {
+              setCustomFieldValue(entityId: $e, customFieldId: $f, value: $v) {
+                id
+              }
+            }
+          `,
+          { e: productId, f: createCustomField.id, v: value },
+        );
+      const results = await Promise.all([
+        set('matte'),
+        set('gloss'),
+        set('satin'),
+      ]);
+      expect(results.every((r) => !r.errors)).toBe(true);
+      const { product } = await gql(
+        `query ($id: ID!) { product(id: $id) { customFieldValues { value customField { name } } } }`,
+        { id: productId },
+      );
+      expect(
+        product.customFieldValues.filter(
+          (v) => v.customField.name === 'Finish',
+        ),
+      ).toHaveLength(1);
+    });
   });
 });

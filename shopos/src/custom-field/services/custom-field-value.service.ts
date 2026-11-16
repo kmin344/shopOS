@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { isUUID } from 'class-validator';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, QueryFailedError, Repository } from 'typeorm';
 import { CustomFieldValue } from '../entities/custom-field-value.entity';
 import { EntityType } from '../entities/custom-field.entity';
 import { CustomFieldService } from './custom-field.service';
@@ -46,25 +46,37 @@ export class CustomFieldValueService {
     validateFieldValue(customField, value);
     await this.assertEntityExists(customField.entityType, entityId);
 
-    let fieldValue = await this.customFieldValueRepository.findOne({
-      where: {
-        entityId,
-        customField: { id: customFieldId },
-      },
-      relations: ['customField'],
-    });
-
-    if (!fieldValue) {
-      fieldValue = this.customFieldValueRepository.create({
-        entityId,
-        customField,
-        value,
+    const findExisting = () =>
+      this.customFieldValueRepository.findOne({
+        where: { entityId, customField: { id: customFieldId } },
+        relations: ['customField'],
       });
-    } else {
-      fieldValue.value = value;
+
+    const existing = await findExisting();
+    if (existing) {
+      existing.value = value;
+      return await this.customFieldValueRepository.save(existing);
     }
 
-    return await this.customFieldValueRepository.save(fieldValue);
+    try {
+      return await this.customFieldValueRepository.save(
+        this.customFieldValueRepository.create({
+          entityId,
+          customField,
+          value,
+        }),
+      );
+    } catch (err) {
+      // 23505 = unique violation: a concurrent request created the row first. Update that row instead.
+      const raced =
+        err instanceof QueryFailedError &&
+        (err.driverError as { code?: string })?.code === '23505'
+          ? await findExisting()
+          : null;
+      if (!raced) throw err;
+      raced.value = value;
+      return await this.customFieldValueRepository.save(raced);
+    }
   }
 
   async getFieldValues(
