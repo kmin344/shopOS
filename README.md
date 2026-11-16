@@ -13,6 +13,9 @@ The problem it targets: store owners on fixed SaaS platforms can't add their own
 - **REST + OpenAPI** alongside GraphQL, with Swagger UI at `/api`.
 - **Tests**: unit tests for the custom-field logic and end-to-end tests that run the GraphQL and REST flows against a real Postgres database. Both run in CI on pull requests and on pushes to `main`.
 
+- **Orders with quantities and stock**: an order has lines of `{ productId, quantity }`. The unit price is copied at order time. Placing an order takes stock in one database transaction with row locks, so concurrent orders cannot oversell (`409` when stock is too low). Cancelling a `PENDING` or `PROCESSING` order returns the stock once. A cancelled order cannot be reopened, and a shipped or delivered order cannot be cancelled. Deleting an order does not change stock, so cancel first. A product that appears in an order cannot be deleted (`409`).
+- **Custom field validation**: values must match the field type (`NUMBER`, `BOOLEAN` as `true`/`false`, `DATE` as ISO 8601, `ENUM` from its options). Required fields reject empty values. An `ENUM` field must define options, and a default value must be valid.
+
 ## How custom fields work
 
 ```mermaid
@@ -99,8 +102,6 @@ These are part of the original design but are **not implemented in this reposito
 - **Connectors** — a standard interface for payment gateways and other third-party providers (the `connector` module is a placeholder).
 - **Admin UI** — a dashboard for defining custom fields without writing GraphQL.
 - **Frontend SDK** — an npm package for typed access to a store's schema.
-- **Validation of custom field values** against their declared type and enum options.
-- **Order line items with quantities** (an order currently holds each product once).
 
 <details>
 <summary>Admin dashboard design</summary>

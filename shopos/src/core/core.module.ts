@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Product } from './entities/product.entity';
 import { Category } from './entities/category.entity';
 import { Order } from './entities/order.entity';
+import { OrderItem } from './entities/order-item.entity';
 import { ProductService } from './services/product.service';
 import { CategoryService } from './services/category.service';
 import { OrderService } from './services/order.service';
@@ -20,7 +21,7 @@ import { ScalarsModule } from '../common/scalars/scalars.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Product, Category, Order]),
+    TypeOrmModule.forFeature([Product, Category, Order, OrderItem]),
     CustomFieldModule,
     ScalarsModule,
   ],

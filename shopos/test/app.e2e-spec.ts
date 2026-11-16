@@ -45,13 +45,28 @@ describe('ShopOS API (e2e)', () => {
       { input: { name, price, stock: 5, categoryId } },
     ).then((d) => d.createProduct.id as string);
 
-  const createOrder = (productIds: string[]) =>
+  const orderFields = `id status totalAmount items { quantity unitPrice product { id name stock } }`;
+
+  const createOrder = (lines: Array<string | [string, number]>) =>
     gql(
       `mutation ($input: CreateOrderInput!) {
-        createOrder(input: $input) { id totalAmount products { name } }
+        createOrder(input: $input) { ${orderFields} }
       }`,
-      { input: { productIds } },
+      {
+        input: {
+          items: lines.map((l) =>
+            typeof l === 'string'
+              ? { productId: l, quantity: 1 }
+              : { productId: l[0], quantity: l[1] },
+          ),
+        },
+      },
     ).then((d) => d.createOrder);
+
+  const stockOf = (productId: string) =>
+    gql(`query ($id: ID!) { product(id: $id) { stock } }`, {
+      id: productId,
+    }).then((d) => d.product.stock as number);
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -129,7 +144,7 @@ describe('ShopOS API (e2e)', () => {
 
     const order = await createOrder([c, d]);
     expect(order.totalAmount).toBe(69.49);
-    expect(order.products).toHaveLength(2);
+    expect(order.items).toHaveLength(2);
   });
 
   it('returns no custom field values for an entity type with no fields defined', async () => {
@@ -179,7 +194,14 @@ describe('ShopOS API (e2e)', () => {
       const id = await createProduct(categoryId, 'Cable', 5);
       const error = await errorOf(
         `mutation ($input: CreateOrderInput!) { createOrder(input: $input) { id } }`,
-        { input: { productIds: [id, id] } },
+        {
+          input: {
+            items: [
+              { productId: id, quantity: 1 },
+              { productId: id, quantity: 2 },
+            ],
+          },
+        },
       );
       expect(error.extensions.originalError.message.join(' ')).toMatch(
         /unique/,
@@ -329,6 +351,133 @@ describe('ShopOS API (e2e)', () => {
           )
         ).message,
       ).toMatch(/at least one value/);
+    });
+  });
+
+  describe('order lines and stock', () => {
+    it('multiplies by quantity, snapshots the unit price and takes stock', async () => {
+      const categoryId = await createCategory('Quantities');
+      const pen = await createProduct(categoryId, 'Pen', 1.1); // stock 5
+      const pad = await createProduct(categoryId, 'Pad', 2.5);
+
+      const order = await createOrder([
+        [pen, 3],
+        [pad, 2],
+      ]);
+      expect(order.totalAmount).toBe(8.3); // 3 x 1.10 + 2 x 2.50
+      expect(order.items.map((i) => i.quantity).sort()).toEqual([2, 3]);
+      expect(await stockOf(pen)).toBe(2);
+      expect(await stockOf(pad)).toBe(3);
+
+      // A later price change does not alter the placed order.
+      await gql(
+        `mutation ($input: UpdateProductInput!) { updateProduct(input: $input) { id } }`,
+        { input: { id: pen, price: 9.99 } },
+      );
+      const { order: again } = await gql(
+        `query ($id: ID!) { order(id: $id) { totalAmount items { unitPrice product { name } } } }`,
+        { id: order.id },
+      );
+      expect(again.totalAmount).toBe(8.3);
+      expect(again.items.find((i) => i.product.name === 'Pen').unitPrice).toBe(
+        1.1,
+      );
+    });
+
+    it('refuses an order that needs more stock than exists and changes nothing', async () => {
+      const categoryId = await createCategory('Oversell');
+      const ok = await createProduct(categoryId, 'Plenty', 1); // stock 5
+      const low = await createProduct(categoryId, 'Scarce', 1);
+
+      const error = await errorOf(
+        `mutation ($input: CreateOrderInput!) { createOrder(input: $input) { id } }`,
+        {
+          input: {
+            items: [
+              { productId: ok, quantity: 1 },
+              { productId: low, quantity: 6 },
+            ],
+          },
+        },
+      );
+      expect(error.message).toMatch(/Not enough stock for "Scarce"/);
+      expect(await stockOf(ok)).toBe(5); // rolled back
+      expect(await stockOf(low)).toBe(5);
+    });
+
+    it('does not oversell when two orders race for the last units', async () => {
+      const categoryId = await createCategory('Race');
+      const id = await createProduct(categoryId, 'Last', 1); // stock 5
+      const place = () =>
+        graphql(
+          `
+            mutation ($input: CreateOrderInput!) {
+              createOrder(input: $input) {
+                id
+              }
+            }
+          `,
+          { input: { items: [{ productId: id, quantity: 3 }] } },
+        );
+      const results = await Promise.all([place(), place()]);
+      expect(results.filter((r) => !r.errors)).toHaveLength(1);
+      expect(await stockOf(id)).toBe(2);
+    });
+
+    it('rejects a zero or negative quantity', async () => {
+      const categoryId = await createCategory('BadQty');
+      const id = await createProduct(categoryId, 'Thing', 1);
+      for (const quantity of [0, -1]) {
+        const error = await errorOf(
+          `mutation ($input: CreateOrderInput!) { createOrder(input: $input) { id } }`,
+          { input: { items: [{ productId: id, quantity }] } },
+        );
+        expect(error.extensions.originalError.message.join(' ')).toMatch(
+          /quantity/,
+        );
+      }
+    });
+
+    it('returns the stock when an order is cancelled, once, and blocks reopening', async () => {
+      const categoryId = await createCategory('Cancel');
+      const id = await createProduct(categoryId, 'Mug', 4);
+      const order = await createOrder([[id, 4]]);
+      expect(await stockOf(id)).toBe(1);
+
+      const setStatus = `mutation ($input: UpdateOrderInput!) { updateOrder(input: $input) { status } }`;
+      const cancel = await gql(setStatus, {
+        input: { id: order.id, status: 'CANCELLED' },
+      });
+      expect(cancel.updateOrder.status).toBe('CANCELLED');
+      expect(await stockOf(id)).toBe(5);
+
+      await gql(setStatus, { input: { id: order.id, status: 'CANCELLED' } });
+      expect(await stockOf(id)).toBe(5); // not returned twice
+
+      const error = await errorOf(setStatus, {
+        input: { id: order.id, status: 'PROCESSING' },
+      });
+      expect(error.message).toMatch(/cannot be reopened/);
+    });
+
+    it('does not allow cancelling a shipped order', async () => {
+      const categoryId = await createCategory('Shipped');
+      const id = await createProduct(categoryId, 'Lamp', 4);
+      const order = await createOrder([[id, 1]]);
+      const setStatus = `mutation ($input: UpdateOrderInput!) { updateOrder(input: $input) { status } }`;
+      await gql(setStatus, { input: { id: order.id, status: 'SHIPPED' } });
+      const error = await errorOf(setStatus, {
+        input: { id: order.id, status: 'CANCELLED' },
+      });
+      expect(error.message).toMatch(/SHIPPED order cannot be cancelled/);
+      expect(await stockOf(id)).toBe(4);
+    });
+
+    it('refuses to delete a product that appears in an order, with 409', async () => {
+      const categoryId = await createCategory('Referenced');
+      const id = await createProduct(categoryId, 'Anchor', 1);
+      await createOrder([id]);
+      await request(app.getHttpServer()).delete(`/products/${id}`).expect(409);
     });
   });
 });

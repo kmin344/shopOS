@@ -1,7 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { isUUID } from 'class-validator';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { Product } from '../entities/product.entity';
 import { CreateProductInput } from '../dto/create-product.input';
 import { CategoryService } from './category.service';
@@ -64,7 +68,20 @@ export class ProductService {
 
   async remove(id: string): Promise<boolean> {
     await this.findOne(id);
-    const result = await this.productRepository.delete(id);
-    return result.affected > 0;
+    try {
+      const result = await this.productRepository.delete(id);
+      return result.affected > 0;
+    } catch (err) {
+      // 23503 = foreign key violation: an order line still points at this product.
+      if (
+        err instanceof QueryFailedError &&
+        (err.driverError as { code?: string })?.code === '23503'
+      ) {
+        throw new ConflictException(
+          `Product ${id} appears in existing orders and cannot be deleted`,
+        );
+      }
+      throw err;
+    }
   }
 }
