@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { createHmac } from 'node:crypto';
 import { AppModule } from './../src/app.module';
 import { HTTP_FETCH } from './../src/connector/payment-connector';
+import { createShopClient, generateFieldTypes } from '../../sdk/src';
 
 // Runs the full GraphQL and REST flow against a real Postgres database.
 // test/setup-env.js points the app at a dedicated *_test database.
@@ -860,6 +861,104 @@ describe('ShopOS API (e2e)', () => {
         null,
       );
       expect(anon.errors[0].message).toBe('An admin API key is required');
+    });
+  });
+
+  describe('SDK against the live API', () => {
+    let url: string;
+
+    beforeAll(async () => {
+      await app.listen(0);
+      url = `${await app.getUrl()}/graphql`.replace('[::1]', 'localhost');
+    });
+
+    interface ShopFields {
+      PRODUCT: {
+        SdkSize?: 'S' | 'M';
+        SdkWeight?: number;
+        SdkFragile?: boolean;
+      };
+      CATEGORY: Record<string, never>;
+      ORDER: Record<string, never>;
+    }
+
+    it('browses, orders and pays with typed custom fields', async () => {
+      const categoryId = await createCategory('SdkCat');
+      const productId = await createProduct(categoryId, 'SdkShirt', 7.25);
+      const define = (input: Record<string, unknown>) =>
+        gql(
+          `mutation ($input: CreateCustomFieldInput!) { createCustomField(input: $input) { id } }`,
+          { input: { entityType: 'PRODUCT', isRequired: false, ...input } },
+        ).then((d) => d.createCustomField.id as string);
+      const set = (fieldId: string, value: string) =>
+        gql(
+          `mutation ($e: ID!, $f: ID!, $v: String!) { setCustomFieldValue(entityId: $e, customFieldId: $f, value: $v) { id } }`,
+          { e: productId, f: fieldId, v: value },
+        );
+      await set(
+        await define({
+          name: 'SdkSize',
+          fieldType: 'ENUM',
+          enumValues: ['S', 'M'],
+        }),
+        'M',
+      );
+      await set(
+        await define({ name: 'SdkWeight', fieldType: 'NUMBER' }),
+        '180',
+      );
+      await set(
+        await define({ name: 'SdkFragile', fieldType: 'BOOLEAN' }),
+        'true',
+      );
+
+      const shop = createShopClient<ShopFields>({ url });
+      const product = await shop.product(productId);
+      expect(product.fields).toMatchObject({
+        SdkSize: 'M',
+        SdkWeight: 180,
+        SdkFragile: true,
+      });
+      expect(product.category.name).toBe('SdkCat');
+      expect((await shop.products()).some((p) => p.id === productId)).toBe(
+        true,
+      );
+      expect((await shop.categories()).some((c) => c.id === categoryId)).toBe(
+        true,
+      );
+      expect((await shop.category(categoryId)).name).toBe('SdkCat');
+
+      const order = await shop.createOrder([{ productId, quantity: 2 }]);
+      expect(order.totalAmount).toBe(14.5);
+      expect((await shop.order(order.id)).items[0].quantity).toBe(2);
+      expect(await shop.paymentProviders()).toEqual(['stripe']);
+      const session = await shop.createPayment(order.id, 'stripe');
+      expect(session.payment).toMatchObject({
+        orderId: order.id,
+        status: 'PENDING',
+        amount: 14.5,
+      });
+
+      const types = generateFieldTypes(
+        await shop.customFieldDefinitions('PRODUCT'),
+        url,
+      );
+      expect(types).toContain('"SdkSize"?: "S" | "M";');
+      expect(types).toContain('"SdkWeight"?: number;');
+    });
+
+    it('surfaces API errors, and refuses admin queries without a key', async () => {
+      const shop = createShopClient({ url });
+      await expect(
+        shop.product('00000000-0000-4000-8000-000000000000'),
+      ).rejects.toThrow(/not found/);
+      await expect(shop.query('{ orders { id } }')).rejects.toThrow(
+        'An admin API key is required',
+      );
+      const admin = createShopClient({ url, adminKey: 'e2e-admin-key' });
+      await expect(admin.query('{ adminKeyValid }')).resolves.toEqual({
+        adminKeyValid: true,
+      });
     });
   });
 });

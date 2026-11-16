@@ -22,6 +22,8 @@ The problem it targets: store owners on fixed SaaS platforms can't add their own
 
 - **Admin page** at `/admin`: list, create and delete custom fields without writing GraphQL. Enter an admin key on the page. The key stays in the browser tab's session storage until you disconnect or close the tab. The page is served with a strict Content Security Policy.
 
+- **TypeScript SDK** in [`sdk/`](sdk/README.md): a typed client for the storefront flow, plus `shopos-sdk types`, which generates types for a store's own custom fields. Tested against the live API in the e2e suite. Not published to npm yet.
+
 ## Authentication
 
 | Open to everyone (storefront) | Needs an admin key |
@@ -151,9 +153,7 @@ shopos/src
 
 ## Roadmap
 
-These are part of the original design but are **not implemented in this repository yet**:
-
-- **Frontend SDK** — an npm package for typed access to a store's schema.
+The original roadmap (connectors, admin UI, SDK, custom field validation, order quantities) is implemented. Open work is listed under [Known limits](#known-limits).
 
 <details>
 <summary>Admin dashboard design</summary>
