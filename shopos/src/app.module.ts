@@ -11,6 +11,7 @@ import { ScalarsModule } from './common/scalars/scalars.module';
 import { dataSourceOptions } from './database/options';
 import { HealthController } from './health.controller';
 import { AdminKeyGuard } from './auth/admin-key.guard';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { AdminKeyGuard } from './auth/admin-key.guard';
     CustomFieldModule,
     ConnectorModule,
     ScalarsModule,
+    AdminModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: AdminKeyGuard }],

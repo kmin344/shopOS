@@ -20,6 +20,8 @@ The problem it targets: store owners on fixed SaaS platforms can't add their own
 
 - **Admin API keys**: every operation needs `Authorization: Bearer <key>` with a key from `ADMIN_API_KEYS`, except the storefront operations listed below. New endpoints are closed unless marked `@Public()`.
 
+- **Admin page** at `/admin`: list, create and delete custom fields without writing GraphQL. Enter an admin key on the page. The key stays in the browser tab's session storage until you disconnect or close the tab. The page is served with a strict Content Security Policy.
+
 ## Authentication
 
 | Open to everyone (storefront) | Needs an admin key |
@@ -151,7 +153,6 @@ shopos/src
 
 These are part of the original design but are **not implemented in this repository yet**:
 
-- **Admin UI** — a dashboard for defining custom fields without writing GraphQL.
 - **Frontend SDK** — an npm package for typed access to a store's schema.
 
 <details>

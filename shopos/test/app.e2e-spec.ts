@@ -820,4 +820,46 @@ describe('ShopOS API (e2e)', () => {
         .expect(200);
     });
   });
+
+  describe('admin page', () => {
+    it('serves the page with a strict content security policy, and its assets', async () => {
+      const server = app.getHttpServer();
+      const page = await request(server).get('/admin').expect(200);
+      expect(page.headers['content-type']).toMatch(/text\/html/);
+      expect(page.headers['content-security-policy']).toMatch(
+        /script-src 'self'/,
+      );
+      expect(page.headers['content-security-policy']).not.toMatch(
+        /unsafe-inline/,
+      );
+      expect(page.text).toContain('<script src="/admin/app.js"');
+
+      const js = await request(server).get('/admin/app.js').expect(200);
+      expect(js.headers['content-type']).toMatch(/javascript/);
+      expect(js.text).toContain('adminKeyValid');
+      await request(server).get('/admin/styles.css').expect(200);
+    });
+
+    it('checks an admin key with adminKeyValid', async () => {
+      expect(
+        (
+          await graphql(`
+            {
+              adminKeyValid
+            }
+          `)
+        ).data.adminKeyValid,
+      ).toBe(true);
+      const anon = await graphql(
+        `
+          {
+            adminKeyValid
+          }
+        `,
+        {},
+        null,
+      );
+      expect(anon.errors[0].message).toBe('An admin API key is required');
+    });
+  });
 });
