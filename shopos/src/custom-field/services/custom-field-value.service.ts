@@ -5,6 +5,7 @@ import { DataSource, In, Repository } from 'typeorm';
 import { CustomFieldValue } from '../entities/custom-field-value.entity';
 import { EntityType } from '../entities/custom-field.entity';
 import { CustomFieldService } from './custom-field.service';
+import { validateFieldValue } from '../validate-value';
 
 @Injectable()
 export class CustomFieldValueService {
@@ -42,6 +43,7 @@ export class CustomFieldValueService {
     value: string,
   ): Promise<CustomFieldValue> {
     const customField = await this.customFieldService.findOne(customFieldId);
+    validateFieldValue(customField, value);
     await this.assertEntityExists(customField.entityType, entityId);
 
     let fieldValue = await this.customFieldValueRepository.findOne({

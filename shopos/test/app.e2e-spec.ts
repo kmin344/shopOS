@@ -268,5 +268,67 @@ describe('ShopOS API (e2e)', () => {
         .get('/products/does-not-exist')
         .expect(404);
     });
+
+    it('rejects custom field values that do not match the field type', async () => {
+      const categoryId = await createCategory('Validation');
+      const productId = await createProduct(categoryId, 'Chair', 10);
+      const defineField = (input: Record<string, unknown>) =>
+        gql(
+          `mutation ($input: CreateCustomFieldInput!) { createCustomField(input: $input) { id } }`,
+          { input },
+        ).then((d) => d.createCustomField.id as string);
+      const setValue = `mutation ($entityId: ID!, $fieldId: ID!, $value: String!) {
+        setCustomFieldValue(entityId: $entityId, customFieldId: $fieldId, value: $value) { value }
+      }`;
+
+      const weightId = await defineField({
+        name: 'Weight',
+        fieldType: 'NUMBER',
+        entityType: 'PRODUCT',
+        isRequired: false,
+      });
+      const sizeId = await defineField({
+        name: 'Size',
+        fieldType: 'ENUM',
+        enumValues: ['S', 'M', 'L'],
+        entityType: 'PRODUCT',
+        isRequired: false,
+      });
+
+      expect(
+        (
+          await errorOf(setValue, {
+            entityId: productId,
+            fieldId: weightId,
+            value: 'heavy',
+          })
+        ).message,
+      ).toMatch(/must be a number/);
+      expect(
+        (
+          await errorOf(setValue, {
+            entityId: productId,
+            fieldId: sizeId,
+            value: 'XL',
+          })
+        ).message,
+      ).toMatch(/one of: S, M, L/);
+
+      const ok = await gql(setValue, {
+        entityId: productId,
+        fieldId: sizeId,
+        value: 'M',
+      });
+      expect(ok.setCustomFieldValue.value).toBe('M');
+
+      expect(
+        (
+          await errorOf(
+            `mutation { createCustomField(input: { name: "Bad", fieldType: ENUM, entityType: PRODUCT, isRequired: false }) { id } }`,
+            {},
+          )
+        ).message,
+      ).toMatch(/at least one value/);
+    });
   });
 });

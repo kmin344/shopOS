@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { CustomField, EntityType } from '../entities/custom-field.entity';
 import { CreateCustomFieldInput } from '../dto/create-custom-field.input';
 import { UpdateCustomFieldInput } from '../dto/update-custom-field.input';
+import { validateFieldDefinition } from '../validate-value';
 
 @Injectable()
 export class CustomFieldService {
@@ -16,6 +17,7 @@ export class CustomFieldService {
   async create(
     createCustomFieldInput: CreateCustomFieldInput,
   ): Promise<CustomField> {
+    validateFieldDefinition(createCustomFieldInput);
     const customField = this.customFieldRepository.create(
       createCustomFieldInput,
     );
@@ -51,6 +53,7 @@ export class CustomFieldService {
     const customField = await this.findOne(id);
 
     Object.assign(customField, updateCustomFieldInput);
+    validateFieldDefinition(customField);
     return await this.customFieldRepository.save(customField);
   }
 
