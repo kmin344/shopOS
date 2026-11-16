@@ -17,6 +17,7 @@ import {
 import { ProductService } from '../services/product.service';
 import { CreateProductInput } from '../dto/create-product.input';
 import { UpdateProductInput } from '../dto/update-product.input';
+import { Public } from '../../auth/public.decorator';
 
 @ApiTags('products')
 @Controller('products')
@@ -31,6 +32,7 @@ export class ProductController {
     return this.productService.create(createProductInput);
   }
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Get all products' })
   @ApiResponse({ status: 200, description: 'Return all products.' })
@@ -38,6 +40,7 @@ export class ProductController {
     return this.productService.findAll();
   }
 
+  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get a product by id' })
   @ApiParam({ name: 'id', description: 'Product ID' })

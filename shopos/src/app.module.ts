@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { GraphQLModule } from '@nestjs/graphql';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
@@ -9,13 +10,15 @@ import { ConnectorModule } from './connector/connector.module';
 import { ScalarsModule } from './common/scalars/scalars.module';
 import { dataSourceOptions } from './database/options';
 import { HealthController } from './health.controller';
+import { AdminKeyGuard } from './auth/admin-key.guard';
 
 @Module({
   imports: [
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
       autoSchemaFile: true,
-      playground: true,
+      // The playground is a development tool; production clients use the API directly.
+      playground: process.env.NODE_ENV !== 'production',
     }),
     ConfigModule.forRoot({ isGlobal: true }),
     // ConfigModule loads .env into process.env before this factory runs.
@@ -28,5 +31,6 @@ import { HealthController } from './health.controller';
     ScalarsModule,
   ],
   controllers: [HealthController],
+  providers: [{ provide: APP_GUARD, useClass: AdminKeyGuard }],
 })
 export class AppModule {}

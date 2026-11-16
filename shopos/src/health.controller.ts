@@ -1,8 +1,10 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { DataSource } from 'typeorm';
+import { Public } from './auth/public.decorator';
 
 @ApiExcludeController()
+@Public()
 @Controller()
 export class HealthController {
   constructor(private readonly dataSource: DataSource) {}

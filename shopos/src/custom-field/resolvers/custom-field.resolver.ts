@@ -3,16 +3,19 @@ import { CustomField, EntityType } from '../entities/custom-field.entity';
 import { CustomFieldService } from '../services/custom-field.service';
 import { CreateCustomFieldInput } from '../dto/create-custom-field.input';
 import { UpdateCustomFieldInput } from '../dto/update-custom-field.input';
+import { Public } from '../../auth/public.decorator';
 
 @Resolver(() => CustomField)
 export class CustomFieldResolver {
   constructor(private readonly customFieldService: CustomFieldService) {}
 
+  @Public()
   @Query(() => [CustomField])
   async customFields(): Promise<CustomField[]> {
     return this.customFieldService.findAll();
   }
 
+  @Public()
   @Query(() => [CustomField])
   async customFieldsByEntity(
     @Args('entityType', { type: () => EntityType }) entityType: EntityType,
@@ -20,6 +23,7 @@ export class CustomFieldResolver {
     return this.customFieldService.findByEntityType(entityType);
   }
 
+  @Public()
   @Query(() => CustomField)
   async customField(
     @Args('id', { type: () => ID }) id: string,

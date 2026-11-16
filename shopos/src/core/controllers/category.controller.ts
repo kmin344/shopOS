@@ -17,6 +17,7 @@ import {
 import { CategoryService } from '../services/category.service';
 import { CreateCategoryInput } from '../dto/create-category.input';
 import { UpdateCategoryInput } from '../dto/update-category.input';
+import { Public } from '../../auth/public.decorator';
 
 @ApiTags('categories')
 @Controller('categories')
@@ -31,6 +32,7 @@ export class CategoryController {
     return this.categoryService.create(createCategoryInput);
   }
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Get all categories' })
   @ApiResponse({ status: 200, description: 'Return all categories.' })
@@ -38,6 +40,7 @@ export class CategoryController {
     return this.categoryService.findAll();
   }
 
+  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get a category by id' })
   @ApiParam({ name: 'id', description: 'Category ID' })

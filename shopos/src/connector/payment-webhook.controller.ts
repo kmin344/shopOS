@@ -13,8 +13,10 @@ import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { WebhookSignatureError } from './payment-connector';
 import { PaymentService } from './payment.service';
+import { Public } from '../auth/public.decorator';
 
 @ApiExcludeController()
+@Public()
 @Controller('webhooks/payments')
 export class PaymentWebhookController {
   private readonly logger = new Logger(PaymentWebhookController.name);

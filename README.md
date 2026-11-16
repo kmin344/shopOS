@@ -18,6 +18,20 @@ The problem it targets: store owners on fixed SaaS platforms can't add their own
 
 - **Payments through connectors**: a `PaymentConnector` interface (`shopos/src/connector/payment-connector.ts`) with a Stripe implementation over the REST API. `createPayment(orderId, provider)` starts a payment for the order total and returns the provider's client secret. Providers report results to `POST /webhooks/payments/<provider>`, which checks the signature over the raw body. A successful payment moves the order from `PENDING` to `PROCESSING`. Repeated webhooks change nothing. Provider errors are logged and the caller gets a generic `502`. An order with payment records cannot be deleted (`409`).
 
+- **Admin API keys**: every operation needs `Authorization: Bearer <key>` with a key from `ADMIN_API_KEYS`, except the storefront operations listed below. New endpoints are closed unless marked `@Public()`.
+
+## Authentication
+
+| Open to everyone (storefront) | Needs an admin key |
+|---|---|
+| Read products, categories and custom field definitions | Create, update and delete products, categories and custom fields |
+| Place an order (`createOrder`, `POST /orders`) | Set custom field values |
+| Read one order by its ID | List all orders, change order status, delete orders |
+| Start a payment, list an order's payments | |
+| Payment webhooks (checked by provider signature), `/health`, `/ready` | |
+
+`ADMIN_API_KEYS` takes a comma-separated list, so you can add a new key, move clients to it, then remove the old one. With no keys set, every admin call is refused. Generate a key with `openssl rand -hex 32`. In production (`NODE_ENV=production`) the GraphQL playground is off.
+
 ## How custom fields work
 
 ```mermaid
@@ -84,6 +98,7 @@ Or run the full stack locally: `cd shopos && docker compose --profile app up --b
 | `PORT`, `HOST` | `3000`, `0.0.0.0` | |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | unset | Both set = Stripe enabled. Webhook URL: `/webhooks/payments/stripe`, events `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`. |
 | `SHOP_CURRENCY` | `usd` | ISO currency code sent to the provider. |
+| `ADMIN_API_KEYS` | unset | Comma-separated admin keys. Unset = no admin access. |
 
 `GET /health` is liveness. `GET /ready` also queries the database and returns `503` when it is down. The image runs as a non-root user.
 
@@ -128,6 +143,8 @@ shopos/src
 ## Known limits
 
 - Refunds are not implemented. Cancelling a paid order returns the stock but does not refund the payment. If a payment succeeds after its order was cancelled, the payment is stored as `SUCCEEDED` and the order stays `CANCELLED`; refund it in the provider dashboard.
+- Anyone can place an order, and an unpaid order holds its stock until an admin cancels it. There is no automatic expiry of unpaid orders and no rate limiting yet.
+- Order IDs are random UUIDs and work as the customer's access to the order. There are no customer accounts.
 - Stripe is the only connector. The Stripe calls are tested against a stubbed HTTP client, not against Stripe itself.
 
 ## Roadmap

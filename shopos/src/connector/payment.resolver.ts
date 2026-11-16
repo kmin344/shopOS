@@ -9,6 +9,7 @@ import {
 } from '@nestjs/graphql';
 import { Payment } from './entities/payment.entity';
 import { PaymentService } from './payment.service';
+import { Public } from '../auth/public.decorator';
 
 @ObjectType()
 export class PaymentSession {
@@ -20,6 +21,7 @@ export class PaymentSession {
   clientSecret: string | null;
 }
 
+@Public()
 @Resolver(() => Payment)
 export class PaymentResolver {
   constructor(private readonly paymentService: PaymentService) {}

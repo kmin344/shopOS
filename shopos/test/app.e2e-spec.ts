@@ -8,6 +8,8 @@ import { HTTP_FETCH } from './../src/connector/payment-connector';
 
 // Runs the full GraphQL and REST flow against a real Postgres database.
 // test/setup-env.js points the app at a dedicated *_test database.
+const ADMIN = 'Bearer e2e-admin-key';
+
 describe('ShopOS API (e2e)', () => {
   let app: INestApplication;
 
@@ -32,9 +34,15 @@ describe('ShopOS API (e2e)', () => {
     },
   );
 
-  const graphql = (query: string, variables: Record<string, unknown> = {}) =>
+  // Sends the admin key unless auth is given (null = no Authorization header).
+  const graphql = (
+    query: string,
+    variables: Record<string, unknown> = {},
+    auth: string | null = ADMIN,
+  ) =>
     request(app.getHttpServer())
       .post('/graphql')
+      .set(auth ? { authorization: auth } : {})
       .send({ query, variables })
       .expect(200)
       .then((res) => res.body);
@@ -253,6 +261,7 @@ describe('ShopOS API (e2e)', () => {
 
       await request(app.getHttpServer())
         .delete(`/categories/${categoryId}`)
+        .set('authorization', ADMIN)
         .expect(409);
 
       const error = await errorOf(
@@ -265,9 +274,13 @@ describe('ShopOS API (e2e)', () => {
     });
 
     it('returns 404 when deleting something that does not exist or has a malformed ID', async () => {
-      await request(app.getHttpServer()).delete('/categories/abc').expect(404);
+      await request(app.getHttpServer())
+        .delete('/categories/abc')
+        .set('authorization', ADMIN)
+        .expect(404);
       await request(app.getHttpServer())
         .delete('/products/00000000-0000-4000-8000-000000000000')
+        .set('authorization', ADMIN)
         .expect(404);
     });
 
@@ -505,7 +518,10 @@ describe('ShopOS API (e2e)', () => {
       const categoryId = await createCategory('Referenced');
       const id = await createProduct(categoryId, 'Anchor', 1);
       await createOrder([id]);
-      await request(app.getHttpServer()).delete(`/products/${id}`).expect(409);
+      await request(app.getHttpServer())
+        .delete(`/products/${id}`)
+        .set('authorization', ADMIN)
+        .expect(409);
     });
 
     it('keeps one value when two requests set the same custom field at once', async () => {
@@ -632,6 +648,7 @@ describe('ShopOS API (e2e)', () => {
       // Payment records keep the order from being deleted.
       await request(app.getHttpServer())
         .delete(`/orders/${order.id}`)
+        .set('authorization', ADMIN)
         .expect(409);
     });
 
@@ -689,6 +706,118 @@ describe('ShopOS API (e2e)', () => {
         { o: order.id },
       );
       expect(payments).toEqual([{ status: 'FAILED' }]);
+    });
+  });
+
+  describe('authentication', () => {
+    const anonymous = (
+      query: string,
+      variables: Record<string, unknown> = {},
+    ) => graphql(query, variables, null);
+
+    it('lets a storefront browse, order and pay without a key', async () => {
+      const categoryId = await createCategory('Storefront');
+      const id = await createProduct(categoryId, 'Poster', 3);
+
+      const browse = await anonymous(
+        `query ($c: ID!, $p: ID!) { categories { id } category(id: $c) { name } products { id } product(id: $p) { name customFieldValues { value } } customFields { id } }`,
+        { c: categoryId, p: id },
+      );
+      expect(browse.errors).toBeUndefined();
+
+      const placed = await anonymous(
+        `mutation ($input: CreateOrderInput!) { createOrder(input: $input) { id } }`,
+        { input: { items: [{ productId: id, quantity: 1 }] } },
+      );
+      expect(placed.errors).toBeUndefined();
+      const orderId = placed.data.createOrder.id;
+
+      const read = await anonymous(
+        `query ($id: ID!) { order(id: $id) { status } }`,
+        { id: orderId },
+      );
+      expect(read.errors).toBeUndefined();
+      const pay = await anonymous(
+        `mutation ($o: ID!) { createPayment(orderId: $o, provider: "stripe") { clientSecret } }`,
+        { o: orderId },
+      );
+      expect(pay.errors).toBeUndefined();
+
+      await request(app.getHttpServer()).get(`/products/${id}`).expect(200);
+      await request(app.getHttpServer()).get('/categories').expect(200);
+      await request(app.getHttpServer()).get(`/orders/${orderId}`).expect(200);
+      await request(app.getHttpServer()).get('/health').expect(200);
+      await request(app.getHttpServer()).get('/ready').expect(200);
+    });
+
+    it.each([
+      [
+        'createCategory',
+        `mutation { createCategory(input: { name: "X" }) { id } }`,
+      ],
+      ['orders', `{ orders { id } }`],
+      [
+        'createCustomField',
+        `mutation { createCustomField(input: { name: "X", fieldType: STRING, entityType: PRODUCT, isRequired: false }) { id } }`,
+      ],
+    ])('refuses the admin operation %s without a key', async (_name, query) => {
+      const res = await anonymous(query);
+      expect(res.errors[0].message).toBe('An admin API key is required');
+      expect(res.data).toBeNull();
+    });
+
+    it('refuses a wrong key, and accepts every configured key', async () => {
+      const wrong = await graphql(
+        `
+          {
+            orders {
+              id
+            }
+          }
+        `,
+        {},
+        'Bearer nope',
+      );
+      expect(wrong.errors[0].message).toBe('An admin API key is required');
+      const notBearer = await graphql(
+        `
+          {
+            orders {
+              id
+            }
+          }
+        `,
+        {},
+        'e2e-admin-key',
+      );
+      expect(notBearer.errors[0].message).toBe('An admin API key is required');
+      const rotated = await graphql(
+        `
+          {
+            orders {
+              id
+            }
+          }
+        `,
+        {},
+        'Bearer old-admin-key',
+      );
+      expect(rotated.errors).toBeUndefined();
+    });
+
+    it('protects admin REST routes with 401', async () => {
+      const server = app.getHttpServer();
+      await request(server).post('/products').send({}).expect(401);
+      await request(server).get('/orders').expect(401);
+      await request(server).delete('/categories/abc').expect(401);
+      await request(server)
+        .put('/orders/abc')
+        .send({ status: 'SHIPPED' })
+        .expect(401);
+      await request(server)
+        .get('/orders')
+        .set('authorization', ADMIN)
+        .expect(200);
     });
   });
 });

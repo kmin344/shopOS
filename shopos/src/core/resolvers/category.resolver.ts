@@ -3,16 +3,19 @@ import { Category } from '../entities/category.entity';
 import { CategoryService } from '../services/category.service';
 import { CreateCategoryInput } from '../dto/create-category.input';
 import { UpdateCategoryInput } from '../dto/update-category.input';
+import { Public } from '../../auth/public.decorator';
 
 @Resolver(() => Category)
 export class CategoryResolver {
   constructor(private readonly categoryService: CategoryService) {}
 
+  @Public()
   @Query(() => [Category])
   async categories(): Promise<Category[]> {
     return this.categoryService.findAll();
   }
 
+  @Public()
   @Query(() => Category)
   async category(
     @Args('id', { type: () => ID }) id: string,
