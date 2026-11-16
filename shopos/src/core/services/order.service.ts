@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, QueryFailedError, Repository } from 'typeorm';
 import { isUUID } from 'class-validator';
 import { Order, OrderStatus } from '../entities/order.entity';
 import { OrderItem } from '../entities/order-item.entity';
@@ -148,7 +148,20 @@ export class OrderService {
   /** Deleting an order does not change stock. Cancel the order first to release its stock. */
   async remove(id: string): Promise<boolean> {
     await this.findOne(id);
-    const result = await this.orderRepository.delete(id);
-    return result.affected > 0;
+    try {
+      const result = await this.orderRepository.delete(id);
+      return result.affected > 0;
+    } catch (err) {
+      // 23503 = foreign key violation: payment records point at this order and must be kept.
+      if (
+        err instanceof QueryFailedError &&
+        (err.driverError as { code?: string })?.code === '23503'
+      ) {
+        throw new ConflictException(
+          `Order ${id} has payment records and cannot be deleted; cancel it instead`,
+        );
+      }
+      throw err;
+    }
   }
 }

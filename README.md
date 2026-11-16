@@ -16,6 +16,8 @@ The problem it targets: store owners on fixed SaaS platforms can't add their own
 - **Orders with quantities and stock**: an order has lines of `{ productId, quantity }`. The unit price is copied at order time. Placing an order takes stock in one database transaction with row locks, so concurrent orders cannot oversell (`409` when stock is too low). Cancelling a `PENDING` or `PROCESSING` order returns the stock once. A cancelled order cannot be reopened, and a shipped or delivered order cannot be cancelled. Deleting an order does not change stock, so cancel first. A product that appears in an order cannot be deleted (`409`).
 - **Custom field validation**: values must match the field type (`NUMBER`, `BOOLEAN` as `true`/`false`, `DATE` as ISO 8601, `ENUM` from its options). Required fields reject empty values. An `ENUM` field must define options, and a default value must be valid.
 
+- **Payments through connectors**: a `PaymentConnector` interface (`shopos/src/connector/payment-connector.ts`) with a Stripe implementation over the REST API. `createPayment(orderId, provider)` starts a payment for the order total and returns the provider's client secret. Providers report results to `POST /webhooks/payments/<provider>`, which checks the signature over the raw body. A successful payment moves the order from `PENDING` to `PROCESSING`. Repeated webhooks change nothing. Provider errors are logged and the caller gets a generic `502`. An order with payment records cannot be deleted (`409`).
+
 ## How custom fields work
 
 ```mermaid
@@ -80,6 +82,8 @@ Or run the full stack locally: `cd shopos && docker compose --profile app up --b
 | `DB_SSL` | `false` | Set `true` for managed Postgres. |
 | `DB_MIGRATIONS_RUN` | `true` | Set `false` when a deploy step runs migrations. |
 | `PORT`, `HOST` | `3000`, `0.0.0.0` | |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | unset | Both set = Stripe enabled. Webhook URL: `/webhooks/payments/stripe`, events `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`. |
+| `SHOP_CURRENCY` | `usd` | ISO currency code sent to the provider. |
 
 `GET /health` is liveness. `GET /ready` also queries the database and returns `503` when it is down. The image runs as a non-root user.
 
@@ -121,11 +125,15 @@ shopos/src
 └── common/          GraphQL scalars and the decimal column transformer
 ```
 
+## Known limits
+
+- Refunds are not implemented. Cancelling a paid order returns the stock but does not refund the payment. If a payment succeeds after its order was cancelled, the payment is stored as `SUCCEEDED` and the order stays `CANCELLED`; refund it in the provider dashboard.
+- Stripe is the only connector. The Stripe calls are tested against a stubbed HTTP client, not against Stripe itself.
+
 ## Roadmap
 
 These are part of the original design but are **not implemented in this repository yet**:
 
-- **Connectors** — a standard interface for payment gateways and other third-party providers (the `connector` module is a placeholder).
 - **Admin UI** — a dashboard for defining custom fields without writing GraphQL.
 - **Frontend SDK** — an npm package for typed access to a store's schema.
 

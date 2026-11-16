@@ -2,12 +2,35 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { DataSource } from 'typeorm';
+import { createHmac } from 'node:crypto';
 import { AppModule } from './../src/app.module';
+import { HTTP_FETCH } from './../src/connector/payment-connector';
 
 // Runs the full GraphQL and REST flow against a real Postgres database.
 // test/setup-env.js points the app at a dedicated *_test database.
 describe('ShopOS API (e2e)', () => {
   let app: INestApplication;
+
+  // Stands in for the network: answers Stripe's PaymentIntent API.
+  let stripeCalls = 0;
+  let stripeDown = false;
+  const stripeFetch = jest.fn<Promise<Response>, [string, RequestInit]>(
+    async () => {
+      if (stripeDown) {
+        return new Response(JSON.stringify({ error: { message: 'down' } }), {
+          status: 503,
+        });
+      }
+      stripeCalls += 1;
+      return new Response(
+        JSON.stringify({
+          id: `pi_${stripeCalls}`,
+          client_secret: `cs_${stripeCalls}`,
+        }),
+        { status: 200 },
+      );
+    },
+  );
 
   const graphql = (query: string, variables: Record<string, unknown> = {}) =>
     request(app.getHttpServer())
@@ -71,9 +94,12 @@ describe('ShopOS API (e2e)', () => {
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(HTTP_FETCH)
+      .useValue(stripeFetch)
+      .compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication({ rawBody: true });
     app.useGlobalPipes(new ValidationPipe());
     await app.init();
 
@@ -514,6 +540,155 @@ describe('ShopOS API (e2e)', () => {
           (v) => v.customField.name === 'Finish',
         ),
       ).toHaveLength(1);
+    });
+  });
+
+  describe('payments', () => {
+    const startPayment = (orderId: string, provider = 'stripe') =>
+      graphql(
+        `
+          mutation ($o: ID!, $p: String!) {
+            createPayment(orderId: $o, provider: $p) {
+              clientSecret
+              payment {
+                id
+                status
+                amount
+                currency
+                providerPaymentId
+              }
+            }
+          }
+        `,
+        { o: orderId, p: provider },
+      );
+
+    const webhook = (type: string, intentId: string, secret = 'whsec_e2e') => {
+      const body = JSON.stringify({
+        type,
+        data: { object: { id: intentId, object: 'payment_intent' } },
+      });
+      const t = Math.floor(Date.now() / 1000);
+      const sig = createHmac('sha256', secret)
+        .update(`${t}.${body}`)
+        .digest('hex');
+      return request(app.getHttpServer())
+        .post('/webhooks/payments/stripe')
+        .set('content-type', 'application/json')
+        .set('stripe-signature', `t=${t},v1=${sig}`)
+        .send(body);
+    };
+
+    const orderStatus = (id: string) =>
+      gql(`query ($id: ID!) { order(id: $id) { status } }`, { id }).then(
+        (d) => d.order.status as string,
+      );
+
+    it('lists the configured providers', async () => {
+      const { paymentProviders } = await gql(`{ paymentProviders }`);
+      expect(paymentProviders).toEqual(['stripe']);
+    });
+
+    it('pays an order: session, signed webhook, order moves to PROCESSING once', async () => {
+      const categoryId = await createCategory('Payments');
+      const id = await createProduct(categoryId, 'Bag', 12.5);
+      const order = await createOrder([[id, 2]]);
+
+      const res = await startPayment(order.id);
+      expect(res.errors).toBeUndefined();
+      const { payment, clientSecret } = res.data.createPayment;
+      expect(payment).toMatchObject({
+        status: 'PENDING',
+        amount: 25,
+        currency: 'usd',
+      });
+      expect(clientSecret).toMatch(/^cs_/);
+      const body = new URLSearchParams(
+        stripeFetch.mock.calls.at(-1)?.[1].body as URLSearchParams,
+      );
+      expect(body.get('amount')).toBe('2500');
+
+      await webhook(
+        'payment_intent.succeeded',
+        payment.providerPaymentId,
+      ).expect(200);
+      expect(await orderStatus(order.id)).toBe('PROCESSING');
+
+      // A repeated delivery changes nothing.
+      await webhook(
+        'payment_intent.succeeded',
+        payment.providerPaymentId,
+      ).expect(200);
+      const { payments } = await gql(
+        `query ($o: ID!) { payments(orderId: $o) { status } }`,
+        { o: order.id },
+      );
+      expect(payments).toEqual([{ status: 'SUCCEEDED' }]);
+
+      // A paid order is no longer PENDING, so it cannot be paid again.
+      expect((await startPayment(order.id)).errors[0].message).toMatch(
+        /Only a PENDING order/,
+      );
+      // Payment records keep the order from being deleted.
+      await request(app.getHttpServer())
+        .delete(`/orders/${order.id}`)
+        .expect(409);
+    });
+
+    it('marks a failed payment and leaves the order PENDING for another attempt', async () => {
+      const categoryId = await createCategory('PayFail');
+      const id = await createProduct(categoryId, 'Hat', 5);
+      const order = await createOrder([id]);
+      const first = (await startPayment(order.id)).data.createPayment.payment;
+      await webhook(
+        'payment_intent.payment_failed',
+        first.providerPaymentId,
+      ).expect(200);
+      expect(await orderStatus(order.id)).toBe('PENDING');
+      const second = await startPayment(order.id);
+      expect(second.errors).toBeUndefined();
+    });
+
+    it('rejects webhooks with a bad signature and ignores unknown payments', async () => {
+      await webhook('payment_intent.succeeded', 'pi_whatever', 'wrong').expect(
+        400,
+      );
+      await request(app.getHttpServer())
+        .post('/webhooks/payments/stripe')
+        .set('content-type', 'application/json')
+        .send('{}')
+        .expect(400);
+      await webhook('payment_intent.succeeded', 'pi_unknown').expect(200);
+    });
+
+    it('rejects an unconfigured provider, and hides provider errors behind a generic 502', async () => {
+      const categoryId = await createCategory('PayErrors');
+      const id = await createProduct(categoryId, 'Scarf', 5);
+      const order = await createOrder([id]);
+
+      expect(
+        (await startPayment(order.id, 'paypal')).errors[0].message,
+      ).toMatch(/not configured/);
+      await request(app.getHttpServer())
+        .post('/webhooks/payments/paypal')
+        .send({})
+        .expect(400);
+
+      stripeDown = true;
+      try {
+        const res = await startPayment(order.id);
+        expect(res.errors[0].message).toBe(
+          'The payment provider is not available',
+        );
+        expect(JSON.stringify(res.errors)).not.toMatch(/down/);
+      } finally {
+        stripeDown = false;
+      }
+      const { payments } = await gql(
+        `query ($o: ID!) { payments(orderId: $o) { status } }`,
+        { o: order.id },
+      );
+      expect(payments).toEqual([{ status: 'FAILED' }]);
     });
   });
 });

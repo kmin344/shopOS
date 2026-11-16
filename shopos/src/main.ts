@@ -6,7 +6,8 @@ import { DateModel } from './common/scalars/date.scalar';
 import { DecimalModel } from './common/scalars/decimal.scalar';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: payment webhooks verify signatures over the exact bytes sent.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.useGlobalPipes(new ValidationPipe());
   app.enableCors();

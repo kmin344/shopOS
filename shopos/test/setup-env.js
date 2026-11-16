@@ -10,3 +10,7 @@ if (!process.env.DB_NAME.endsWith('_test')) {
 
 // The suite builds the schema itself from the migrations (see beforeAll).
 process.env.DB_MIGRATIONS_RUN = 'false';
+
+// Enables the Stripe connector. The suite replaces HTTP_FETCH, so no request reaches Stripe.
+process.env.STRIPE_SECRET_KEY = 'sk_test_e2e';
+process.env.STRIPE_WEBHOOK_SECRET = 'whsec_e2e';
