@@ -17,12 +17,14 @@ import {
 import { OrderService } from '../services/order.service';
 import { CreateOrderInput } from '../dto/create-order.input';
 import { UpdateOrderInput } from '../dto/update-order.input';
+import { Public } from '../../auth/public.decorator';
 
 @ApiTags('orders')
 @Controller('orders')
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
+  @Public()
   @Post()
   @ApiOperation({ summary: 'Create a new order' })
   @ApiBody({ type: CreateOrderInput })
@@ -39,6 +41,7 @@ export class OrderController {
     return this.orderService.findAll();
   }
 
+  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get an order by id' })
   @ApiParam({ name: 'id', description: 'Order ID' })

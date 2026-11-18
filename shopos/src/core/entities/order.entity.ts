@@ -1,11 +1,11 @@
+import { decimalTransformer } from '../../common/transformers/decimal.transformer';
 import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  ManyToMany,
-  JoinTable,
+  OneToMany,
 } from 'typeorm';
 import {
   ObjectType,
@@ -14,7 +14,7 @@ import {
   Float,
   registerEnumType,
 } from '@nestjs/graphql';
-import { Product } from './product.entity';
+import { OrderItem } from './order-item.entity';
 import { HasCustomFields } from '../../custom-field/interfaces/has-custom-fields.interface';
 import { CustomFieldValue } from '../../custom-field/entities/custom-field-value.entity';
 
@@ -46,13 +46,16 @@ export class Order implements HasCustomFields {
   status: OrderStatus;
 
   @Field(() => Float)
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column('decimal', {
+    precision: 10,
+    scale: 2,
+    transformer: decimalTransformer,
+  })
   totalAmount: number;
 
-  @Field(() => [Product])
-  @ManyToMany(() => Product)
-  @JoinTable()
-  products: Product[];
+  @Field(() => [OrderItem])
+  @OneToMany(() => OrderItem, (item) => item.order, { cascade: ['insert'] })
+  items: OrderItem[];
 
   @Field()
   @CreateDateColumn()

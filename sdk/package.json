@@ -1,0 +1,26 @@
+{
+  "name": "shopos-sdk",
+  "version": "0.1.0",
+  "description": "Typed client for the ShopOS API, with per-store custom field types",
+  "license": "GPL-3.0-only",
+  "type": "commonjs",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "bin": {
+    "shopos-sdk": "dist/src/cli.js"
+  },
+  "files": [
+    "dist/src"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.json && node --test \"dist/test/*.test.js\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.3.1",
+    "typescript": "~5.8.2"
+  }
+}

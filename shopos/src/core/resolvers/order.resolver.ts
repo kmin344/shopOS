@@ -3,6 +3,7 @@ import { Order } from '../entities/order.entity';
 import { OrderService } from '../services/order.service';
 import { CreateOrderInput } from '../dto/create-order.input';
 import { UpdateOrderInput } from '../dto/update-order.input';
+import { Public } from '../../auth/public.decorator';
 
 @Resolver(() => Order)
 export class OrderResolver {
@@ -13,11 +14,13 @@ export class OrderResolver {
     return this.orderService.findAll();
   }
 
+  @Public()
   @Query(() => Order)
   async order(@Args('id', { type: () => ID }) id: string): Promise<Order> {
     return this.orderService.findOne(id);
   }
 
+  @Public()
   @Mutation(() => Order)
   async createOrder(
     @Args('input') createOrderInput: CreateOrderInput,

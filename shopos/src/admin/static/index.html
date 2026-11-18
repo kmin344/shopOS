@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShopOS Admin</title>
+  <link rel="stylesheet" href="/admin/styles.css">
+  <script src="/admin/app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <h1>ShopOS Admin</h1>
+    <form id="key-form" class="key-form" autocomplete="off">
+      <label for="key-input" class="sr-only">Admin API key</label>
+      <input id="key-input" type="password" placeholder="Admin API key" required>
+      <button type="submit" id="key-connect">Connect</button>
+      <button type="button" id="key-clear" class="secondary" hidden>Disconnect</button>
+      <span id="key-status" class="status" role="status"></span>
+    </form>
+  </header>
+
+  <main>
+    <section aria-labelledby="new-title" class="card">
+      <h2 id="new-title">New custom field</h2>
+      <p class="hint">A new field appears on every product, category or order through the API at once. No migration is needed.</p>
+      <form id="field-form" class="grid">
+        <label>Name
+          <input name="name" required maxlength="100" placeholder="Color">
+        </label>
+        <label>Applies to
+          <select name="entityType">
+            <option value="PRODUCT">Products</option>
+            <option value="CATEGORY">Categories</option>
+            <option value="ORDER">Orders</option>
+          </select>
+        </label>
+        <label>Type
+          <select name="fieldType" id="field-type">
+            <option value="STRING">Text</option>
+            <option value="NUMBER">Number</option>
+            <option value="BOOLEAN">Yes / no</option>
+            <option value="DATE">Date</option>
+            <option value="ENUM">List of options</option>
+          </select>
+        </label>
+        <label><span>Default value <span class="optional">(optional)</span></span>
+          <input name="defaultValue" placeholder="">
+        </label>
+        <label class="wide" id="enum-row" hidden>Options, one per line
+          <textarea name="enumValues" rows="4" placeholder="Small&#10;Medium&#10;Large"></textarea>
+        </label>
+        <label class="wide"><span>Description <span class="optional">(optional)</span></span>
+          <input name="description" maxlength="500">
+        </label>
+        <label class="check"><input type="checkbox" name="isRequired"> Required</label>
+        <div class="actions wide">
+          <button type="submit" id="create-btn" disabled>Create field</button>
+          <span id="form-status" class="status" role="status"></span>
+        </div>
+      </form>
+    </section>
+
+    <section aria-labelledby="list-title" class="card">
+      <div class="row">
+        <h2 id="list-title">Custom fields</h2>
+        <select id="filter" aria-label="Show fields for">
+          <option value="">All</option>
+          <option value="PRODUCT">Products</option>
+          <option value="CATEGORY">Categories</option>
+          <option value="ORDER">Orders</option>
+        </select>
+      </div>
+      <p id="list-status" class="status" role="status"></p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Applies to</th><th>Type</th><th>Options / default</th><th>Required</th><th><span class="sr-only">Actions</span></th></tr>
+          </thead>
+          <tbody id="field-rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

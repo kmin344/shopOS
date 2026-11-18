@@ -1,3 +1,4 @@
+import { decimalTransformer } from '../../common/transformers/decimal.transformer';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -27,7 +28,11 @@ export class Product implements HasCustomFields {
   description?: string;
 
   @Field(() => Float)
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column('decimal', {
+    precision: 10,
+    scale: 2,
+    transformer: decimalTransformer,
+  })
   price: number;
 
   @Field(() => Int)

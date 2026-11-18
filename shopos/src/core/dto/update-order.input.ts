@@ -1,11 +1,11 @@
-import { InputType, Field, ID, PartialType } from '@nestjs/graphql';
+import { InputType, Field, ID } from '@nestjs/graphql';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsOptional } from 'class-validator';
 import { OrderStatus } from '../entities/order.entity';
-import { CreateOrderInput } from './create-order.input';
 
+/** Only the status can change after an order is placed. Order lines are fixed. */
 @InputType()
-export class UpdateOrderInput extends PartialType(CreateOrderInput) {
+export class UpdateOrderInput {
   @ApiProperty({ description: 'Order ID' })
   @Field(() => ID)
   id: string;

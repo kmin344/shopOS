@@ -3,16 +3,19 @@ import { Product } from '../entities/product.entity';
 import { ProductService } from '../services/product.service';
 import { CreateProductInput } from '../dto/create-product.input';
 import { UpdateProductInput } from '../dto/update-product.input';
+import { Public } from '../../auth/public.decorator';
 
 @Resolver(() => Product)
 export class ProductResolver {
   constructor(private readonly productService: ProductService) {}
 
+  @Public()
   @Query(() => [Product])
   async products(): Promise<Product[]> {
     return this.productService.findAll();
   }
 
+  @Public()
   @Query(() => Product)
   async product(@Args('id', { type: () => ID }) id: string): Promise<Product> {
     return this.productService.findOne(id);
